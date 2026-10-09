@@ -1,0 +1,179 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: ABC_RETAIL
+    schema: BRONZE
+    loaded_at_field: ingest_ts
+    tables:
+      - name: bronze_clickstream
+      - name: bronze_orders
+      - name: bronze_customers
+      - name: bronze_products
+      - name: bronze_fx_rates
+      - name: bronze_customer_feedback
+      - name: bronze_cdc_deletes
+
+models:
+  - name: stg_events
+    description: Typed, valid, deduplicated clickstream events with a stable anonymous-user key.
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: event_time_utc
+        data_tests: [not_null]
+      - name: analytic_user_id
+        data_tests: [not_null]
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              values: ['view', 'add_to_cart', 'checkout', 'purchase']
+
+  - name: stg_order_changes
+    description: Valid typed order versions retained for SCD1 current state and status history.
+    columns:
+      - name: change_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ['created', 'paid', 'shipped', 'cancelled', 'returned']
+      - name: updated_at
+        data_tests: [not_null]
+
+  - name: stg_orders_current
+    description: Current order state protected from stale late-arriving updates and enriched with soft-delete state.
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: user_id
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ['created', 'paid', 'shipped', 'cancelled', 'returned']
+      - name: is_deleted
+        data_tests: [not_null]
+
+  - name: stg_order_status_history
+    description: Immutable order status and delete-event timeline.
+    columns:
+      - name: status_event_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests: [not_null]
+      - name: status_at
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ['created', 'paid', 'shipped', 'cancelled', 'returned', 'deleted']
+
+  - name: stg_order_items
+    description: Valid line items from the current non-deleted order version, with original and USD amounts.
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders_current')
+              field: order_id
+      - name: line_number
+        data_tests: [not_null]
+      - name: sku
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: sku
+      - name: qty
+        data_tests: [not_null]
+      - name: line_amount_original
+        data_tests: [not_null]
+
+  - name: stg_customer_changes
+    description: Typed and deduplicated customer change history for downstream SCD Type 2 processing.
+    columns:
+      - name: change_id
+        data_tests: [not_null, unique]
+      - name: user_id
+        data_tests: [not_null]
+      - name: updated_at
+        data_tests: [not_null]
+      - name: record_hash
+        data_tests: [not_null]
+
+  - name: stg_customers_current
+    description: Current customer profile protected from stale changes and enriched with soft-delete state.
+    columns:
+      - name: user_id
+        data_tests: [not_null, unique]
+      - name: is_deleted
+        data_tests: [not_null]
+
+  - name: stg_products
+    description: Current product master maintained with monotonic SCD1 updates.
+    columns:
+      - name: sku
+        data_tests: [not_null, unique]
+      - name: product_name
+        data_tests: [not_null]
+      - name: unit_cost
+        data_tests: [not_null]
+
+  - name: stg_fx_rates
+    description: Positive, typed and deduplicated daily FX rates to USD.
+    columns:
+      - name: rate_date
+        data_tests: [not_null]
+      - name: source_currency
+        data_tests: [not_null]
+      - name: target_currency
+        data_tests:
+          - accepted_values:
+              values: ['USD']
+      - name: rate
+        data_tests: [not_null]
+
+  - name: stg_customer_feedback
+    description: Current valid feedback with PII detection and an email-redacted text column for Cortex AI.
+    columns:
+      - name: feedback_id
+        data_tests: [not_null, unique]
+      - name: user_id
+        data_tests: [not_null]
+      - name: feedback_text_redacted
+        data_tests: [not_null]
+      - name: feedback_hash
+        data_tests: [not_null]
+
+  - name: stg_cdc_deletes
+    description: Valid and deduplicated source CDC delete events using business_key, changed_at and source_lsn.
+    columns:
+      - name: delete_event_id
+        data_tests: [not_null, unique]
+      - name: entity_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['order', 'customer']
+      - name: entity_id
+        data_tests: [not_null]
+      - name: operation
+        data_tests:
+          - accepted_values:
+              values: ['D']
+      - name: deleted_at
+        data_tests: [not_null]
+
+  - name: dq_silver_rejections
+    description: Deterministic semantic rejections produced by Silver validation rules.
+    columns:
+      - name: rejection_id
+        data_tests: [not_null, unique]
+      - name: source_name
+        data_tests: [not_null]
+      - name: error_code
+        data_tests: [not_null]

@@ -1,0 +1,62 @@
+# macOS / Windows
+.DS_Store
+Thumbs.db
+.Spotlight-V100/
+.Trashes/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+.aws/
+.dbt/
+.snowflake/
+profiles.local.yml
+connections.toml
+*.pem
+*.key
+*.p12
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# dbt build artifacts and logs
+**/target/
+**/dbt_packages/
+**/logs/
+**/.user.yml
+**/partial_parse.msgpack
+
+# Temporary and generated working files
+/tmp/
+*.tmp
+*.temp
+*.log
+/build/
+/dist/
+
+# Local landing dataset (large and already stored in S3)
+# Keep only lightweight metadata/sample files needed to understand the project.
+/landing/**
+!/landing/_manifest.json
+!/landing/dim_fx_rates/
+!/landing/dim_fx_rates/fx_rates.csv
+
+# Final PDFs under output/pdf are intentionally versioned.
